@@ -17,7 +17,7 @@ $form_kansa.icon                 = "icon.ico"
 
 $group_targeting                 = New-Object system.Windows.Forms.Groupbox
 $group_targeting.height          = 300
-$group_targeting.width           = 325
+$group_targeting.width           = 300
 $group_targeting.text            = "Targeting"
 $group_targeting.location        = New-Object System.Drawing.Point(20,19)
 
@@ -59,47 +59,50 @@ $Panel1.location                 = New-Object System.Drawing.Point(574,149)
 
 $radio_target                    = New-Object system.Windows.Forms.RadioButton
 $radio_target.text               = "Target:"
-$radio_target.AutoSize           = $true
-$radio_target.width              = 104
+$radio_target.AutoSize           = $false
+$radio_target.width              = 110
 $radio_target.height             = 20
-$radio_target.location           = New-Object System.Drawing.Point(20,20)
+$radio_target.location           = New-Object System.Drawing.Point(10,20)
 $radio_target.Font               = 'Microsoft Sans Serif,10'
 
 $radio_target_list               = New-Object system.Windows.Forms.RadioButton
 $radio_target_list.text          = "Target List:"
-$radio_target_list.AutoSize      = $true
-$radio_target_list.width         = 104
+$radio_target_list.AutoSize      = $false
+$radio_target_list.width         = 110
 $radio_target_list.height        = 20
-$radio_target_list.location      = New-Object System.Drawing.Point(20,50)
+$radio_target_list.location      = New-Object System.Drawing.Point(10,50)
 $radio_target_list.Font          = 'Microsoft Sans Serif,10'
 
 $radio_target_count              = New-Object system.Windows.Forms.RadioButton
 $radio_target_count.text         = "Target Count:"
-$radio_target_count.AutoSize     = $true
-$radio_target_count.width        = 104
+$radio_target_count.AutoSize     = $false
+$radio_target_count.width        = 110
 $radio_target_count.height       = 20
-$radio_target_count.location     = New-Object System.Drawing.Point(20,270)
+$radio_target_count.location     = New-Object System.Drawing.Point(10,272)
 $radio_target_count.Font         = 'Microsoft Sans Serif,10'
 
 $text_targetRRR                  = New-Object system.Windows.Forms.TextBox
 $text_targetRRR.multiline        = $false
-$text_targetRRR.width            = 180
+$text_targetRRR.BackColor        = "#cccccc"
+$text_targetRRR.width            = 170
 $text_targetRRR.height           = 20
-$text_targetRRR.location         = New-Object System.Drawing.Point(125,20)
+$text_targetRRR.location         = New-Object System.Drawing.Point(120,20)
 $text_targetRRR.Font             = 'Microsoft Sans Serif,10'
 
 $text_target_count               = New-Object system.Windows.Forms.TextBox
 $text_target_count.multiline     = $false
-$text_target_count.width         = 180
+$text_target_count.BackColor     = "#cccccc"
+$text_target_count.width         = 170
 $text_target_count.height        = 20
-$text_target_count.location      = New-Object System.Drawing.Point(125,270)
+$text_target_count.location      = New-Object System.Drawing.Point(120,270)
 $text_target_count.Font          = 'Microsoft Sans Serif,10'
 
 $list_target_list                = New-Object system.Windows.Forms.ListView
+$list_target_list.BackColor      = "#cccccc"
 $list_target_list.text           = "listView"
-$list_target_list.width          = 180
+$list_target_list.width          = 170
 $list_target_list.height         = 210
-$list_target_list.location       = New-Object System.Drawing.Point(125,50)
+$list_target_list.location       = New-Object System.Drawing.Point(120,50)
 
 $check_auth                      = New-Object system.Windows.Forms.CheckBox
 $check_auth.text                 = "Use Authentication"
