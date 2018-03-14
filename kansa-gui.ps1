@@ -304,4 +304,4 @@ $text_target_count.Add_TextChanged({  })
 
 #endregion GUI }
 
-#[void]$form_kansa.ShowDialog()
+[void]$form_kansa.ShowDialog()
