@@ -4,4 +4,4 @@
 
 A GUI Wrapper for Kansa
 
-###### Icons made by Freepik from www.flaticon.com
+###### Icon made by Freepik from www.flaticon.com
