@@ -1,7 +1,12 @@
 Add-Type -AssemblyName System.Windows.Forms
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
-$CREDENTIAL = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$global:MOD_PATH = ".\Kansa\Modules"
+$global:TARGET = "127.0.0.1"
+$global:TARGETLIST = "127.0.0.1"
+$global:TARGETCOUNT = "10"
+$global:CREDENTIAL = $null
+$global:CRED_NAME = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 Push-Location .\Kansa
 $MODULES = $(.\kansa.ps1 -ListModules) | Out-String
 $MODULES = $MODULES.Split("`r`n",[System.StringSplitOptions]::RemoveEmptyEntries)
@@ -69,6 +74,7 @@ $radio_target.width              = 110
 $radio_target.height             = 20
 $radio_target.location           = New-Object System.Drawing.Point(10,20)
 $radio_target.Font               = 'Microsoft Sans Serif,10'
+$radio_target.Checked            = $true
 
 $radio_target_list               = New-Object system.Windows.Forms.RadioButton
 $radio_target_list.text          = "Target List:"
@@ -86,15 +92,17 @@ $radio_target_count.height       = 20
 $radio_target_count.location     = New-Object System.Drawing.Point(10,274)
 $radio_target_count.Font         = 'Microsoft Sans Serif,10'
 
-$text_targetRRR                  = New-Object system.Windows.Forms.TextBox
-$text_targetRRR.multiline        = $false
-$text_targetRRR.BackColor        = "#cccccc"
-$text_targetRRR.width            = 170
-$text_targetRRR.height           = 20
-$text_targetRRR.location         = New-Object System.Drawing.Point(120,20)
-$text_targetRRR.Font             = 'Microsoft Sans Serif,10'
+$text_target                  = New-Object system.Windows.Forms.TextBox
+$text_target.Text             = $TARGET
+$text_target.multiline        = $false
+$text_target.BackColor        = "#cccccc"
+$text_target.width            = 170
+$text_target.height           = 20
+$text_target.location         = New-Object System.Drawing.Point(120,20)
+$text_target.Font             = 'Microsoft Sans Serif,10'
 
 $text_target_count               = New-Object system.Windows.Forms.TextBox
+$text_target_count.Text          = $TARGETCOUNT
 $text_target_count.multiline     = $false
 $text_target_count.BackColor     = "#cccccc"
 $text_target_count.width         = 170
@@ -102,9 +110,8 @@ $text_target_count.height        = 20
 $text_target_count.location      = New-Object System.Drawing.Point(120,269)
 $text_target_count.Font          = 'Microsoft Sans Serif,10'
 
-$list_target_list                = New-Object system.Windows.Forms.ListView
+$list_target_list                = New-Object system.Windows.Forms.ListBox
 $list_target_list.BackColor      = "#cccccc"
-$list_target_list.text           = "listView"
 $list_target_list.width          = 170
 $list_target_list.height         = 210
 $list_target_list.location       = New-Object System.Drawing.Point(120,48)
@@ -127,7 +134,7 @@ $btn_set_user.Font               = 'Microsoft Sans Serif,10'
 $btn_set_user.ForeColor          = "#4d4d4d"
 
 $lbl_user                        = New-Object system.Windows.Forms.Label
-$lbl_user.text                   = $CREDENTIAL
+$lbl_user.text                   = $CRED_NAME
 $lbl_user.AutoSize               = $true
 $lbl_user.width                  = 100
 $lbl_user.height                 = 10
@@ -141,20 +148,32 @@ $combo_auth.width                = 180
 $combo_auth.height               = 20
 $combo_auth.location             = New-Object System.Drawing.Point(10,105)
 $combo_auth.Font                 = 'Microsoft Sans Serif,10'
+$combo_auth.Items.Add("Basic") > $null
+$combo_auth.Items.Add("CredSSP") > $null
+$combo_auth.Items.Add("Digest") > $null
+$combo_auth.Items.Add("Kerberos") > $null
+$combo_auth.Items.Add("Negotiate") > $null
+$combo_auth.Items.Add("NegotiateWithImplicitCredential") > $null
 
 $list_modules                    = New-Object system.Windows.Forms.ListBox
 $list_modules.BackColor          = "#cccccc"
-$list_modules.text               = "listBox"
 $list_modules.width              = 334
 $list_modules.height             = 235
 $list_modules.location           = New-Object System.Drawing.Point(10,20)
+$list_modules.SelectionMode      = "MultiExtended"
+foreach ($MODULE in $MODULES){
+    $list_modules.Items.Add($MODULE) > $null
+}
 
 $list_analysis                   = New-Object system.Windows.Forms.ListBox
 $list_analysis.BackColor         = "#cccccc"
-$list_analysis.text              = "list_analysis"
 $list_analysis.width             = 346
 $list_analysis.height            = 267
 $list_analysis.location          = New-Object System.Drawing.Point(10,20)
+$list_analysis.SelectionMode     = "MultiExtended"
+foreach ($ANAL in $ANALYSIS){
+  $list_analysis.Items.Add($ANAL) > $null
+}
 
 $check_ssl                       = New-Object system.Windows.Forms.CheckBox
 $check_ssl.text                  = "Use SSL"
@@ -189,6 +208,7 @@ $lbl_mod_path.location           = New-Object System.Drawing.Point(16,22)
 $lbl_mod_path.Font               = 'Microsoft Sans Serif,10'
 
 $txt_mod_path                    = New-Object system.Windows.Forms.TextBox
+$txt_mod_path.Text               = $MOD_PATH
 $txt_mod_path.multiline          = $false
 $txt_mod_path.BackColor          = "#cccccc"
 $txt_mod_path.width              = 121
@@ -274,7 +294,7 @@ $bar_execute.height              = 33
 $bar_execute.location            = New-Object System.Drawing.Point(10,88)
 
 $form_kansa.controls.AddRange(@($group_targeting,$group_auth,$group_settings,$group_connection,$group_modules,$group_analysis,$panel_execute))
-$group_targeting.controls.AddRange(@($radio_target,$radio_target_list,$radio_target_count,$text_targetRRR,$text_target_count,$list_target_list))
+$group_targeting.controls.AddRange(@($radio_target,$radio_target_list,$radio_target_count,$text_target,$text_target_count,$list_target_list))
 $group_auth.controls.AddRange(@($check_auth,$btn_set_user,$lbl_user,$combo_auth))
 $group_modules.controls.AddRange(@($list_modules,$check_push_bin,$check_rm_bin))
 $group_analysis.controls.AddRange(@($list_analysis))
@@ -283,11 +303,17 @@ $group_settings.controls.AddRange(@($lbl_mod_path,$txt_mod_path,$check_ascii,$ch
 $panel_execute.controls.AddRange(@($btn_run,$btn_cancel,$bar_execute))
 
 #region gui events {
-$btn_set_user.Add_Click({  })
-$btn_run.Add_Click({  })
-$panel_execute.Add_Click({  })
+$btn_set_user.Add_Click({
+  $global:CREDENTIAL = Get-Credential
+  $global:CRED_NAME = $CREDENTIAL.UserName
+  $lbl_user.Text = $CRED_NAME
+  $lbl_user.Refresh()
+})
+$btn_run.Add_Click({ Write-Host $CRED_NAME})
+$btn_cancel.Add_Click({  })
 $check_ascii.Add_CheckedChanged({  })
-$check_analysis.Add_CheckedChanged({  })
+$check_analysis.Add_CheckedChanged({ if ($check_analysis.Checked){ Write-Host "Woot" }
+                                     else { Write-Host "Nope"} })
 $check_transcribe.Add_CheckedChanged({  })
 $radio_target.Add_CheckedChanged({  })
 $radio_target_list.Add_CheckedChanged({  })
@@ -298,7 +324,7 @@ $check_auth.Add_CheckedChanged({  })
 $txt_mod_path.Add_TextChanged({  })
 $txt_json_depth.Add_TextChanged({  })
 $txt_port.Add_TextChanged({  })
-$text_targetRRR.Add_TextChanged({  })
+$text_target.Add_TextChanged({  })
 $text_target_count.Add_TextChanged({  })
 #endregion events }
 
