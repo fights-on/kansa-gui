@@ -1,21 +1,21 @@
 Add-Type -AssemblyName System.Windows.Forms
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
-$global:MOD_PATH = ".\Kansa\Modules"
+$global:MOD_PATH = ".\Modules"
 $global:TARGET = "127.0.0.1"
-$global:TARGETLIST = "127.0.0.1"
-$global:TARGETCOUNT = "10"
+$global:TARGET_LIST = "127.0.0.1"
+$global:TARGET_COUNT = "10"
+$global:USE_AUTH = $false
 $global:CREDENTIAL = $null
 $global:CRED_NAME = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$global:AUTHENTICATION = "Kerberos"
 $global:PUSH_BIN = $false
 $global:RM_BIN = $false
 $global:ASCII = $false
-$global:ANALYSIS = $false
+$global:USE_ANALYSIS = $false
 $global:TRANSCRIBE = $false
 $global:USE_SSL = $false
-$global:WINRM_PORT_SSL = "5986"
 $global:WINRM_PORT = "5985"
-$global:AUTHENTICATION = "Kerberos"
 $global:JSON_DEPTH = "10"
 Push-Location .\Kansa
 $MODULES = $(.\kansa.ps1 -ListModules) | Out-String
@@ -102,23 +102,23 @@ $radio_target_count.height       = 20
 $radio_target_count.location     = New-Object System.Drawing.Point(10,274)
 $radio_target_count.Font         = 'Microsoft Sans Serif,10'
 
-$text_target                  = New-Object system.Windows.Forms.TextBox
-$text_target.Text             = $TARGET
-$text_target.multiline        = $false
-$text_target.BackColor        = "#cccccc"
-$text_target.width            = 170
-$text_target.height           = 20
-$text_target.location         = New-Object System.Drawing.Point(120,20)
-$text_target.Font             = 'Microsoft Sans Serif,10'
+$txt_target                  = New-Object system.Windows.Forms.TextBox
+$txt_target.Text             = $TARGET
+$txt_target.multiline        = $false
+$txt_target.BackColor        = "#cccccc"
+$txt_target.width            = 170
+$txt_target.height           = 20
+$txt_target.location         = New-Object System.Drawing.Point(120,20)
+$txt_target.Font             = 'Microsoft Sans Serif,10'
 
-$text_target_count               = New-Object system.Windows.Forms.TextBox
-$text_target_count.Text          = $TARGETCOUNT
-$text_target_count.multiline     = $false
-$text_target_count.BackColor     = "#cccccc"
-$text_target_count.width         = 170
-$text_target_count.height        = 20
-$text_target_count.location      = New-Object System.Drawing.Point(120,269)
-$text_target_count.Font          = 'Microsoft Sans Serif,10'
+$txt_target_count               = New-Object system.Windows.Forms.TextBox
+$txt_target_count.Text          = $TARGET_COUNT
+$txt_target_count.multiline     = $false
+$txt_target_count.BackColor     = "#cccccc"
+$txt_target_count.width         = 170
+$txt_target_count.height        = 20
+$txt_target_count.location      = New-Object System.Drawing.Point(120,269)
+$txt_target_count.Font          = 'Microsoft Sans Serif,10'
 
 $list_target_list                = New-Object system.Windows.Forms.ListBox
 $list_target_list.BackColor      = "#cccccc"
@@ -158,12 +158,7 @@ $combo_auth.width                = 180
 $combo_auth.height               = 20
 $combo_auth.location             = New-Object System.Drawing.Point(10,105)
 $combo_auth.Font                 = 'Microsoft Sans Serif,10'
-$combo_auth.Items.Add("Basic") > $null
-$combo_auth.Items.Add("CredSSP") > $null
-$combo_auth.Items.Add("Digest") > $null
-$combo_auth.Items.Add("Kerberos") > $null
-$combo_auth.Items.Add("Negotiate") > $null
-$combo_auth.Items.Add("NegotiateWithImplicitCredential") > $null
+$combo_auth.Items.AddRange(("Basic", "CredSSP", "Digest", "Kerberos", "Negotiate", "NegotiateWithImplicitCredential")) > $null
 
 $list_modules                    = New-Object system.Windows.Forms.ListBox
 $list_modules.BackColor          = "#cccccc"
@@ -306,7 +301,7 @@ $bar_execute.height              = 33
 $bar_execute.location            = New-Object System.Drawing.Point(10,88)
 
 $form_kansa.controls.AddRange(@($group_targeting,$group_auth,$group_settings,$group_connection,$group_modules,$group_analysis,$panel_execute))
-$group_targeting.controls.AddRange(@($radio_target,$radio_target_list,$radio_target_count,$text_target,$text_target_count,$list_target_list))
+$group_targeting.controls.AddRange(@($radio_target,$radio_target_list,$radio_target_count,$txt_target,$txt_target_count,$list_target_list))
 $group_auth.controls.AddRange(@($check_auth,$btn_set_user,$lbl_user,$combo_auth))
 $group_modules.controls.AddRange(@($list_modules,$check_push_bin,$check_rm_bin))
 $group_analysis.controls.AddRange(@($list_analysis))
@@ -321,23 +316,126 @@ $btn_set_user.Add_Click({
   $lbl_user.Text = $CRED_NAME
   $lbl_user.Refresh()
 })
-$btn_run.Add_Click({ Write-Host $CRED_NAME})
+
+$btn_run.Add_Click({
+        Write-Host "Auth:" $AUTHENTICATION "`n"
+})
+
 $btn_cancel.Add_Click({  })
-$check_ascii.Add_CheckedChanged({  })
-$check_analysis.Add_CheckedChanged({ if ($check_analysis.Checked){ Write-Host "Woot" }
-                                     else { Write-Host "Nope"} })
-$check_transcribe.Add_CheckedChanged({  })
+
+$check_ascii.Add_CheckedChanged({
+    if ($check_ascii.Checked){
+        $global:ASCII = $true
+    } else {
+        $global:ASCII = $false
+    }
+})
+
+$check_analysis.Add_CheckedChanged({
+    if ($check_analysis.Checked){
+        $global:USE_ANALYSIS = $true
+    } else {
+        $global:USE_ANALYSIS = $false
+    }
+})
+
+$check_transcribe.Add_CheckedChanged({
+    if ($check_transcribe.Checked){
+        $global:TRANSCRIBE = $true
+    } else {
+        $global:TRANSCRIBE = $false
+    }
+})
+
 $radio_target.Add_CheckedChanged({  })
+
 $radio_target_list.Add_CheckedChanged({  })
+
 $radio_target_count.Add_CheckedChanged({  })
-$check_push_bin.Add_CheckedChanged({  })
-$check_rm_bin.Add_CheckedChanged({  })
-$check_auth.Add_CheckedChanged({  })
-$txt_mod_path.Add_TextChanged({  })
-$txt_json_depth.Add_TextChanged({  })
-$txt_port.Add_TextChanged({  })
-$text_target.Add_TextChanged({  })
-$text_target_count.Add_TextChanged({  })
+
+$check_push_bin.Add_CheckedChanged({
+    if ($check_push_bin.Checked){
+        $global:PUSH_BIN = $true
+    } else {
+        $global:PUSH_BIN = $false
+    }
+})
+
+$check_rm_bin.Add_CheckedChanged({
+    if ($check_rm_bin.Checked){
+        $global:RM_BIN = $true
+    } else {
+        $global:RM_BIN = $false
+    }
+})
+
+$check_auth.Add_CheckedChanged({
+    if ($check_auth.Checked){
+        $global:USE_AUTH = $true
+    } else {
+        $global:USE_AUTH = $false
+    }
+})
+
+$check_ssl.Add_CheckedChanged({
+    if ($check_ssl.Checked){
+        $txt_port.Text = "5986"
+        $global:USE_SSL = $true
+    } else {
+        $txt_port.Text = "5985"
+        $global:USE_SSL = $false
+    }
+    $global:WINRM_PORT = $txt_port.Text
+})
+
+$txt_mod_path.Add_TextChanged({ $global:MOD_PATH = $txt_mod_path.Text })
+
+$txt_json_depth.Add_TextChanged({
+    if ($txt_json_depth.Text -eq ""){
+        $txt_json_depth.Text = "10"
+        } elseif ($txt_json_depth.Text -match '\D'){
+            $txt_json_depth.Text = $txt_json_depth.Text -replace '\D'
+            if ($txt_json_depth.Text.Length -gt 0){
+                $txt_json_depth.Focus()
+                $txt_json_depth.SelectionStart = $txt_json_depth.Text.Length
+            }
+        }
+        $global:JSON_DEPTH = $txt_json_depth.Text
+})
+
+$txt_port.Add_TextChanged({
+    if ($check_ssl.Checked -And $txt_port.Text -eq ""){
+        $txt_port.Text = "5986"
+    } elseif ($txt_port.Text -eq ""){
+        $txt_port.Text = "5985"
+    } elseif ($txt_port.Text -match '\D'){
+        $txt_port.Text = $txt_port.Text -replace '\D'
+        if ($txt_port.Text.Length -gt 0){
+            $txt_port.Focus()
+            $txt_port.SelectionStart = $txt_port.Text.Length
+        }
+    }
+    $global:WINRM_PORT = $txt_port.Text
+})
+
+$txt_target.Add_TextChanged({ $global:TARGET = $txt_target.Text })
+
+$txt_target_count.Add_TextChanged({
+    if ($txt_target_count.Text -eq ""){
+        $txt_target_count.Text = "10"
+        } elseif ($txt_target_count.Text -match '\D'){
+            $txt_target_count.Text = $txt_target_count.Text -replace '\D'
+            if ($txt_target_count.Text.Length -gt 0){
+                $txt_target_count.Focus()
+                $txt_target_count.SelectionStart = $txt_target_count.Text.Length
+            }
+        }
+        $global:TARGET_COUNT = $txt_target_count.Text
+})
+
+$combo_auth.Add_TextChanged({
+    $global:AUTHENTICATION = $combo_auth.Text
+})
 #endregion events }
 
 #endregion GUI }
