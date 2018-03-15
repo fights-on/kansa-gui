@@ -7,6 +7,16 @@ $global:TARGETLIST = "127.0.0.1"
 $global:TARGETCOUNT = "10"
 $global:CREDENTIAL = $null
 $global:CRED_NAME = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$global:PUSH_BIN = $false
+$global:RM_BIN = $false
+$global:ASCII = $false
+$global:ANALYSIS = $false
+$global:TRANSCRIBE = $false
+$global:USE_SSL = $false
+$global:WINRM_PORT_SSL = "5986"
+$global:WINRM_PORT = "5985"
+$global:AUTHENTICATION = "Kerberos"
+$global:JSON_DEPTH = "10"
 Push-Location .\Kansa
 $MODULES = $(.\kansa.ps1 -ListModules) | Out-String
 $MODULES = $MODULES.Split("`r`n",[System.StringSplitOptions]::RemoveEmptyEntries)
@@ -142,7 +152,7 @@ $lbl_user.location               = New-Object System.Drawing.Point(18,49)
 $lbl_user.Font                   = 'Microsoft Sans Serif,10'
 
 $combo_auth                      = New-Object system.Windows.Forms.ComboBox
-$combo_auth.text                 = "Kerberos"
+$combo_auth.text                 = $AUTHENTICATION
 $combo_auth.BackColor            = "#cccccc"
 $combo_auth.width                = 180
 $combo_auth.height               = 20
@@ -184,6 +194,7 @@ $check_ssl.location              = New-Object System.Drawing.Point(16,26)
 $check_ssl.Font                  = 'Microsoft Sans Serif,10'
 
 $txt_port                        = New-Object system.Windows.Forms.TextBox
+$txt_port.Text                   = $WINRM_PORT
 $txt_port.multiline              = $false
 $txt_port.BackColor              = "#cccccc"
 $txt_port.width                  = 134
@@ -265,6 +276,7 @@ $lbl_json_depth.location         = New-Object System.Drawing.Point(14,130)
 $lbl_json_depth.Font             = 'Microsoft Sans Serif,10'
 
 $txt_json_depth                  = New-Object system.Windows.Forms.TextBox
+$txt_json_depth.Text             = $JSON_DEPTH
 $txt_json_depth.multiline        = $false
 $txt_json_depth.BackColor        = "#cccccc"
 $txt_json_depth.width            = 123
