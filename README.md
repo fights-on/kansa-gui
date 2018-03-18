@@ -24,10 +24,10 @@ Ugly GUI, but it works....
 
 #### ToDo:
 
-- Fix Authentication
-- Fix GUI Layout  *(In Progress)*
+- Fix Authentication *(In Progress)*
+- ~~Fix GUI Layout~~  *(Done, will release in next version)*
 - ~~Implement Cancel Button and Progress Bar (If possible)~~ (Not happening)
-- Clean Code (Styling and better practices)
+- Clean Code (Styling and better practices) *(In Progress)*
 - Show warning if a module/script is selected and it has a binary dependency that is missing.
 
 ###### Icon made by Freepik from www.flaticon.com
