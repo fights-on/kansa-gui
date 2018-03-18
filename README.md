@@ -4,6 +4,12 @@
 
 A GUI Wrapper for Kansa
 
+#### Screenshots:
+
+![Screenshot1](https://user-images.githubusercontent.com/28634328/37562086-18dae66e-2a03-11e8-81a3-c2d7e2b379b2.png)
+
+Ugly GUI, but it works....
+
 #### Changelog:
 
 - v0.01:
