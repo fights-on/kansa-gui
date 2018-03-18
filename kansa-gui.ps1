@@ -1,5 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName PresentationCore,PresentationFramework
 [System.Windows.Forms.Application]::EnableVisualStyles()
+[void][Reflection.Assembly]::LoadWithPartialName("Microsoft.VisualBasic")
 
 $global:MOD_PATH = ".\Modules"
 $global:TARGET = "127.0.0.1"
@@ -20,10 +22,10 @@ $global:JSON_DEPTH = "10"
 Push-Location .\Kansa
 $MODULES = $(.\kansa.ps1 -ListModules) | Out-String
 $MODULES = $MODULES.Split("`r`n",[System.StringSplitOptions]::RemoveEmptyEntries)
-$MODULES = $MODULES[0..($MODULES.Length-2)]
+$MODULES = $MODULES[0..($MODULES.Length-2)] | sort -unique
 $ANALYSIS = $(.\kansa.ps1 -ListAnalysis) | Out-String
 $ANALYSIS = $ANALYSIS.Split("`r`n",[System.StringSplitOptions]::RemoveEmptyEntries)
-$ANALYSIS = $ANALYSIS[0..($ANALYSIS.Length-2)]
+$ANALYSIS = $ANALYSIS[0..($ANALYSIS.Length-2)] | sort -unique
 Pop-Location
 
 #region begin GUI{
@@ -125,6 +127,7 @@ $list_target_list.BackColor      = "#cccccc"
 $list_target_list.width          = 170
 $list_target_list.height         = 210
 $list_target_list.location       = New-Object System.Drawing.Point(120,48)
+$list_target_list.SelectionMode  = "MultiExtended"
 
 $check_auth                      = New-Object system.Windows.Forms.CheckBox
 $check_auth.text                 = "Use Authentication"
@@ -300,8 +303,22 @@ $bar_execute.width               = 209
 $bar_execute.height              = 33
 $bar_execute.location            = New-Object System.Drawing.Point(10,88)
 
+$btn_target_add                  = New-Object system.Windows.Forms.Button
+$btn_target_add.text             = "+"
+$btn_target_add.width            = 20
+$btn_target_add.height           = 20
+$btn_target_add.location         = New-Object System.Drawing.Point(83,79)
+$btn_target_add.Font             = 'Microsoft Sans Serif,10'
+
+$btn_target_rm                   = New-Object system.Windows.Forms.Button
+$btn_target_rm.text              = "-"
+$btn_target_rm.width             = 20
+$btn_target_rm.height            = 20
+$btn_target_rm.location          = New-Object System.Drawing.Point(83,109)
+$btn_target_rm.Font              = 'Microsoft Sans Serif,10'
+
 $form_kansa.controls.AddRange(@($group_targeting,$group_auth,$group_settings,$group_connection,$group_modules,$group_analysis,$panel_execute))
-$group_targeting.controls.AddRange(@($radio_target,$radio_target_list,$radio_target_count,$txt_target,$txt_target_count,$list_target_list))
+$group_targeting.controls.AddRange(@($radio_target,$radio_target_list,$radio_target_count,$txt_target,$txt_target_count,$list_target_list,$btn_target_add,$btn_target_rm))
 $group_auth.controls.AddRange(@($check_auth,$btn_set_user,$lbl_user,$combo_auth))
 $group_modules.controls.AddRange(@($list_modules,$check_push_bin,$check_rm_bin))
 $group_analysis.controls.AddRange(@($list_analysis))
@@ -315,10 +332,6 @@ $btn_set_user.Add_Click({
   $global:CRED_NAME = $CREDENTIAL.UserName
   $lbl_user.Text = $CRED_NAME
   $lbl_user.Refresh()
-})
-
-$btn_run.Add_Click({
-        Write-Host "Auth:" $AUTHENTICATION "`n"
 })
 
 $btn_cancel.Add_Click({  })
@@ -435,6 +448,95 @@ $txt_target_count.Add_TextChanged({
 
 $combo_auth.Add_TextChanged({
     $global:AUTHENTICATION = $combo_auth.Text
+})
+
+$btn_target_add.Add_Click({
+    $text = [Microsoft.VisualBasic.Interaction]::InputBox("Add a Target to Kansa`nMultiple targets can be comma separated.", "Add Target")
+    $text = $text -replace "\s",""
+    $text = $text.Split(",")
+    $list_target_list.Items.AddRange($text)
+})
+
+$btn_target_rm.Add_Click({
+    $temp = @()
+    if ($list_target_list.SelectedItems.Count -gt 0){
+        For ($i=0; $i -le $list_target_list.Items.Count - 1; $i++){
+            if ($list_target_list.SelectedItems -NotContains $list_target_list.Items[$i]){
+                $temp += $list_target_list.Items[$i]
+            }
+        }
+        $list_length = $list_target_list.Items.Count
+        For ($i=0; $i -le $list_length - 1; $i++){
+            $list_target_list.Items.Remove($list_target_list.Items[0])
+        }
+        $list_target_list.Items.AddRange($temp)
+    }
+})
+
+$list_modules.add_SelectedIndexChanged({
+    If ($list_modules.SelectedItems.Count -gt 0){
+        Clear-Content -Path ".\Kansa\Modules\Modules.conf"
+        ForEach ($i in $list_modules.SelectedItems){
+            Add-Content ".\Kansa\Modules\Modules.conf" $i
+        }
+    }
+})
+
+$list_analysis.add_SelectedIndexChanged({
+    If ($list_analysis.SelectedItems.Count -gt 0){
+        Clear-Content -Path ".\Kansa\Analysis\Analysis.conf"
+        ForEach ($i in $list_analysis.SelectedItems){
+            Add-Content ".\Kansa\Analysis\Analysis.conf" $i
+        }
+    }
+})
+
+$btn_run.Add_Click({
+    Push-Location .\Kansa
+    $KANSA_CMD = ".\kansa.ps1"
+    $KANSA_CMD += " -ModulePath " + $MOD_PATH
+
+    if ($radio_target.Checked){
+        $KANSA_CMD += " -Target " + $txt_target.Text
+    } elseif ($radio_target_list.Checked){
+        if ($list_target_list.Items.Count -eq 0){
+            [System.Windows.MessageBox]::Show("You must add targets to the list!", "No Targets", "OK", "Warning")
+            Pop-Location
+            return
+        } else {
+            if (!(Test-Path ".\Targets.txt")){
+                New-Item -Path ".\Targets.txt" -Type "File"
+            }
+            Clear-Content -Path ".\Targets.txt"
+            ForEach ($i in $list_target_list.Items){
+                Add-Content ".\Targets.txt" $i
+            }
+            $KANSA_CMD += " -TargetList Targets.txt"
+        }
+    } else {
+        $KANSA_CMD += " -TargetCount " + $txt_target_count.Text
+    }
+
+    if ($PUSH_BIN){$KANSA_CMD += " -Pushbin"}
+    if ($RM_BIN){$KANSA_CMD += " -Rmbin"}
+    if ($ASCII){$KANSA_CMD += " -Ascii"}
+    if ($TRANSCRIBE){$KANSA_CMD += " -Transcribe"}
+    if ($USE_ANALYSIS){$KANSA_CMD += " -Analysis"}
+    if ($USE_SSL){$KANSA_CMD += " -UseSSL"}
+    $KANSA_CMD += " -Port " + $WINRM_PORT
+    $KANSA_CMD += " -JSONDepth " + $JSON_DEPTH
+
+    #if ($USE_AUTH -And $CREDENTIAL){
+    #    $KANSA_CMD += " -Credential " + $CREDENTIAL + " -Authentication " + $AUTHENTICATION
+    #    Write-Host $KANSA_CMD
+    #    iex $KANSA_CMD
+    #} else {
+    #    Write-Host $KANSA_CMD
+    #    iex $KANSA_CMD
+    #}
+    iex $KANSA_CMD
+    Pop-Location
+    Move-Item -Path ".\Kansa\Output_*" -Destination "."
 })
 #endregion events }
 
