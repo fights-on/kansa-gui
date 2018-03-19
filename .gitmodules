@@ -1,4 +1,3 @@
-[submodule "kansa"]
+[submodule "Kansa"]
 	path = Kansa
 	url = https://github.com/davehull/kansa.git
-	branch = master
