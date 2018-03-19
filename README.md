@@ -8,8 +8,6 @@ A GUI Wrapper for Kansa
 
 ![Screenshot1](https://user-images.githubusercontent.com/28634328/37573385-58e51b90-2abb-11e8-911b-327e45497ad0.png)
 
-Ugly GUI, but it works....
-
 #### Changelog:
 
 - V1.0
