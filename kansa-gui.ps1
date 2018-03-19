@@ -1,545 +1,596 @@
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName PresentationCore,PresentationFramework
+Add-Type -AssemblyName System.Windows.Forms,PresentationCore,PresentationFramework
 [System.Windows.Forms.Application]::EnableVisualStyles()
 [void][Reflection.Assembly]::LoadWithPartialName("Microsoft.VisualBasic")
 
-$global:MOD_PATH = ".\Modules"
-$global:TARGET = "127.0.0.1"
-$global:TARGET_LIST = "127.0.0.1"
-$global:TARGET_COUNT = "10"
-$global:USE_AUTH = $false
-$global:CREDENTIAL = $null
-$global:CRED_NAME = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$global:AUTHENTICATION = "Kerberos"
-$global:PUSH_BIN = $false
-$global:RM_BIN = $false
-$global:ASCII = $false
-$global:USE_ANALYSIS = $false
-$global:TRANSCRIBE = $false
-$global:USE_SSL = $false
-$global:WINRM_PORT = "5985"
-$global:JSON_DEPTH = "10"
-Push-Location .\Kansa
-$MODULES = $(.\kansa.ps1 -ListModules) | Out-String
-$MODULES = $MODULES.Split("`r`n",[System.StringSplitOptions]::RemoveEmptyEntries)
-$MODULES = $MODULES[0..($MODULES.Length-2)] | sort -unique
-$ANALYSIS = $(.\kansa.ps1 -ListAnalysis) | Out-String
-$ANALYSIS = $ANALYSIS.Split("`r`n",[System.StringSplitOptions]::RemoveEmptyEntries)
-$ANALYSIS = $ANALYSIS[0..($ANALYSIS.Length-2)] | sort -unique
-Pop-Location
+# Globals
+$CLI_Arguments = @{}
+$Options = @{
+    Target       = "127.0.0.1"
+    Target_Count = "10"
+    Use_Auth     = $false
+    Creds        = $null
+    Auth_Method  = "Kerberos"
+    Mod_Path     = ".\Modules"
+    JSON_Depth   = "10"
+    Port         = "5985"
+}
 
-#region begin GUI{
+Function Read-Module-List(){
+    # Generates an array of modules available for Kansa
+    Push-Location .\Kansa
+    $Modules = $(.\kansa.ps1 -ListModules) | Out-String
+    Pop-Location
+    $Modules = $Modules.Split("`r`n",[System.StringSplitOptions]::RemoveEmptyEntries)
+    Return $Modules[0..($Modules.Length-2)] | Sort-Object -Unique
+}
 
-$form_kansa                      = New-Object system.Windows.Forms.Form
-$form_kansa.ClientSize           = '795,647'
-$form_kansa.text                 = "Kansa"
-$form_kansa.BackColor            = "#4d4d4d"
-$form_kansa.TopMost              = $false
-$form_kansa.icon                 = "icon.ico"
+Function Read-Script-List(){
+    # Generates an array of analysis scripts available for Kansa
+    Push-Location .\Kansa
+    $Scripts = $(.\kansa.ps1 -ListAnalysis) | Out-String
+    Pop-Location
+    $Scripts = $Scripts.Split("`r`n",[System.StringSplitOptions]::RemoveEmptyEntries)
+    Return $Scripts[0..($Scripts.Length-2)] | Sort-Object -Unique
+}
 
-$group_targeting                 = New-Object system.Windows.Forms.Groupbox
-$group_targeting.height          = 300
-$group_targeting.width           = 300
-$group_targeting.text            = "Targeting"
-$group_targeting.location        = New-Object System.Drawing.Point(10,10)
+Function Initialize-Target-List($items){
+    # Builds Targets.txt in the Kansa Directory
+    If (!(Test-Path ".\Kansa\Targets.txt")){
+        New-Item -Path ".\Kansa\Targets.txt" -Type "File"
+    }
+    Clear-Content -Path ".\Kansa\Targets.txt"
+    ForEach ($i in $items){
+        Add-Content ".\Kansa\Targets.txt" $i
+    }
+}
 
-$group_auth                      = New-Object system.Windows.Forms.Groupbox
-$group_auth.height               = 140
-$group_auth.width                = 223
-$group_auth.text                 = "Authentication"
-$group_auth.location             = New-Object System.Drawing.Point(320,10)
+Function Initialize-Splat(){
+    # Build the HashTable for Kansa's arguments
 
-$group_settings                  = New-Object system.Windows.Forms.Groupbox
-$group_settings.height           = 163
-$group_settings.width            = 236
-$group_settings.text             = "App Settings"
-$group_settings.location         = New-Object System.Drawing.Point(555,10)
+    # Targeting
+    If ($rad_target.Checked){
+        $CLI_Arguments.Target = $Options.Target
+        $CLI_Arguments.Remove("TargetList")
+        $CLI_Arguments.Remove("TargetCount")
+    } ElseIf ($rad_target_list.Checked){
+        If ($lst_target_list.Items.Count -eq 0){
+            [System.Windows.MessageBox]::Show("You must add targets to the list!", "No Targets", "OK", "Warning") > $null
+            Return $false
+        }
+        $CLI_Arguments.TargetList = "Targets.txt"
+        $CLI_Arguments.Remove("Target")
+        $CLI_Arguments.Remove("TargetCount")
+    } Else {
+        $CLI_Arguments.TargetCount = $Options.Target_Count
+        $CLI_Arguments.Remove("Target")
+        $CLI_Arguments.Remove("TargetList")
+    }
 
-$group_connection                = New-Object system.Windows.Forms.Groupbox
-$group_connection.height         = 123
-$group_connection.width          = 216
-$group_connection.text           = "Connection Settings"
-$group_connection.location       = New-Object System.Drawing.Point(555,186)
+    # Authentication
+    If ($chk_auth){
+        If ($Options.Creds){
+            $CLI_Arguments.Credential = $Options.Creds
+        } Else {
+            $CLI_Arguments.Remove("Credential")
+        }
+        If (!($Options.Auth_Method -eq "Kerberos")){
+            $CLI_Arguments.Authentication = $Options.Auth_Method
+        } Else {
+            $CLI_Arguments.Remove("Authentication")
+        }
+    }
 
-$group_modules                   = New-Object system.Windows.Forms.Groupbox
-$group_modules.height            = 294
-$group_modules.width             = 375
-$group_modules.text              = "Modules"
-$group_modules.location          = New-Object System.Drawing.Point(20,332)
+    # Settings
+    If (!($Options.Mod_Path -eq ".\Modules")){
+        $CLI_Arguments.ModulePath = $Options.Mod_Path
+    } Else {
+        $CLI_Arguments.Remove("ModulePath")
+    }
+    If (!($Options.JSON_Depth -eq "10")){
+        $CLI_Arguments.JSONDepth = $Options.JSON_Depth
+    } Else {
+        $CLI_Arguments.Remove("JSONDepth")
+    }
+    If ($chk_ascii.Checked){
+        $CLI_Arguments.Ascii = $true
+    } Else {
+        $CLI_Arguments.Remove("Ascii")
+    }
+    If ($chk_transcribe.Checked){
+        $CLI_Arguments.Transcribe = $true
+    } Else {
+        $CLI_Arguments.Remove("Transcribe")
+    }
 
-$group_analysis                  = New-Object system.Windows.Forms.Groupbox
-$group_analysis.height           = 295
-$group_analysis.width            = 365
-$group_analysis.text             = "Post-Analysis"
-$group_analysis.location         = New-Object System.Drawing.Point(409,332)
+    # Connection Settings
+    If ($chk_ssl.Checked){
+        $CLI_Arguments.UseSSL = $true
+        If (!($Options.Port -eq "5986")){
+            $CLI_Arguments.Port = $Options.Port
+        } Else {
+            $CLI_Arguments.Remove("Port")
+        }
+    } Else {
+        $CLI_Arguments.Remove("UseSSL")
+        If (!($Options.Port -eq "5985")){
+            $CLI_Arguments.Port = $Options.Port
+        } Else {
+            $CLI_Arguments.Remove("Port")
+        }
+    }
 
-$panel_execute                   = New-Object system.Windows.Forms.Panel
-$panel_execute.height            = 150
-$panel_execute.width             = 223
-$panel_execute.BackColor         = "#f2f2f2"
-$panel_execute.location          = New-Object System.Drawing.Point(322,160)
+    # Module Settings
+    If ($chk_push_bin.Checked){
+        $CLI_Arguments.Pushbin = $true
+    } Else {
+        $CLI_Arguments.Remove("Pushbin")
+    }
+    If ($chk_rm_bin.Checked){
+        $CLI_Arguments.Rmbin = $true
+    } Else {
+        $CLI_Arguments.Remove("Rmbin")
+    }
 
-$radio_target                    = New-Object system.Windows.Forms.RadioButton
-$radio_target.text               = "Target:"
-$radio_target.AutoSize           = $false
-$radio_target.width              = 110
-$radio_target.height             = 20
-$radio_target.location           = New-Object System.Drawing.Point(10,20)
-$radio_target.Font               = 'Microsoft Sans Serif,10'
-$radio_target.Checked            = $true
+    # Analysis Settings
+    If ($chk_analysis.Checked){
+        $CLI_Arguments.Analysis = $true
+    } Else {
+        $CLI_Arguments.Remove("Analysis")
+    }
 
-$radio_target_list               = New-Object system.Windows.Forms.RadioButton
-$radio_target_list.text          = "Target List:"
-$radio_target_list.AutoSize      = $false
-$radio_target_list.width         = 110
-$radio_target_list.height        = 20
-$radio_target_list.location      = New-Object System.Drawing.Point(10,60)
-$radio_target_list.Font          = 'Microsoft Sans Serif,10'
+    Return $true
+}
 
-$radio_target_count              = New-Object system.Windows.Forms.RadioButton
-$radio_target_count.text         = "Target Count:"
-$radio_target_count.AutoSize     = $false
-$radio_target_count.width        = 110
-$radio_target_count.height       = 20
-$radio_target_count.location     = New-Object System.Drawing.Point(10,274)
-$radio_target_count.Font         = 'Microsoft Sans Serif,10'
+# GUI
+$frm_kansa                       = New-Object system.Windows.Forms.Form
+$frm_kansa.ClientSize            = '790,610'
+$frm_kansa.text                  = "Kansa GUI"
+$frm_kansa.BackColor             = "#4d4d4d"
+$frm_kansa.TopMost               = $false
+$frm_kansa.icon                  = "icon.ico"
 
-$txt_target                  = New-Object system.Windows.Forms.TextBox
-$txt_target.Text             = $TARGET
-$txt_target.multiline        = $false
-$txt_target.BackColor        = "#cccccc"
-$txt_target.width            = 170
-$txt_target.height           = 20
-$txt_target.location         = New-Object System.Drawing.Point(120,20)
-$txt_target.Font             = 'Microsoft Sans Serif,10'
+# Targeting
+$grp_targeting                   = New-Object system.Windows.Forms.Groupbox
+$grp_targeting.height            = 280
+$grp_targeting.width             = 250
+$grp_targeting.BackColor         = "#cccccc"
+$grp_targeting.text              = "Targeting"
+$grp_targeting.location          = New-Object System.Drawing.Point(10,10)
 
-$txt_target_count               = New-Object system.Windows.Forms.TextBox
-$txt_target_count.Text          = $TARGET_COUNT
-$txt_target_count.multiline     = $false
-$txt_target_count.BackColor     = "#cccccc"
-$txt_target_count.width         = 170
-$txt_target_count.height        = 20
-$txt_target_count.location      = New-Object System.Drawing.Point(120,269)
-$txt_target_count.Font          = 'Microsoft Sans Serif,10'
+$rad_target                      = New-Object system.Windows.Forms.RadioButton
+$rad_target.text                 = "Target:"
+$rad_target.AutoSize             = $false
+$rad_target.width                = 107
+$rad_target.height               = 20
+$rad_target.location             = New-Object System.Drawing.Point(10,20)
+$rad_target.Font                 = 'Microsoft Sans Serif,10'
+$rad_target.Checked              = $true
+$rad_target.Cursor               = [System.Windows.Forms.Cursors]::Hand
 
-$list_target_list                = New-Object system.Windows.Forms.ListBox
-$list_target_list.BackColor      = "#cccccc"
-$list_target_list.width          = 170
-$list_target_list.height         = 210
-$list_target_list.location       = New-Object System.Drawing.Point(120,48)
-$list_target_list.SelectionMode  = "MultiExtended"
+$rad_target_list                 = New-Object system.Windows.Forms.RadioButton
+$rad_target_list.text            = "Target List:"
+$rad_target_list.AutoSize        = $false
+$rad_target_list.width           = 107
+$rad_target_list.height          = 20
+$rad_target_list.location        = New-Object System.Drawing.Point(10,50)
+$rad_target_list.Font            = 'Microsoft Sans Serif,10'
+$rad_target_list.Cursor          = [System.Windows.Forms.Cursors]::Hand
 
-$check_auth                      = New-Object system.Windows.Forms.CheckBox
-$check_auth.text                 = "Use Authentication"
-$check_auth.AutoSize             = $true
-$check_auth.width                = 95
-$check_auth.height               = 20
-$check_auth.location             = New-Object System.Drawing.Point(20,20)
-$check_auth.Font                 = 'Microsoft Sans Serif,10'
+$rad_target_count                = New-Object system.Windows.Forms.RadioButton
+$rad_target_count.text           = "Target Count:"
+$rad_target_count.AutoSize       = $false
+$rad_target_count.width          = 107
+$rad_target_count.height         = 20
+$rad_target_count.location       = New-Object System.Drawing.Point(10,255)
+$rad_target_count.Font           = 'Microsoft Sans Serif,10'
+$rad_target_count.Cursor         = [System.Windows.Forms.Cursors]::Hand
+
+$txt_target                      = New-Object system.Windows.Forms.TextBox
+$txt_target.multiline            = $false
+$txt_target.text                 = "127.0.0.1"
+$txt_target.BackColor            = "#b3b3b3"
+$txt_target.width                = 125
+$txt_target.height               = 20
+$txt_target.location             = New-Object System.Drawing.Point(117,18)
+$txt_target.Font                 = 'Microsoft Sans Serif,10'
+
+$txt_target_count                = New-Object system.Windows.Forms.TextBox
+$txt_target_count.multiline      = $false
+$txt_target_count.text           = "10"
+$txt_target_count.BackColor      = "#b3b3b3"
+$txt_target_count.width          = 125
+$txt_target_count.height         = 20
+$txt_target_count.location       = New-Object System.Drawing.Point(117,253)
+$txt_target_count.Font           = 'Microsoft Sans Serif,10'
+
+$lst_target_list                 = New-Object system.Windows.Forms.ListBox
+$lst_target_list.BackColor       = "#b3b3b3"
+$lst_target_list.width           = 125
+$lst_target_list.height          = 200
+$lst_target_list.location        = New-Object System.Drawing.Point(117,48)
+$lst_target_list.SelectionMode  = "MultiExtended"
+
+$btn_target_add                  = New-Object system.Windows.Forms.Button
+$btn_target_add.BackColor        = "#fad6fc"
+$btn_target_add.text             = "+"
+$btn_target_add.width            = 20
+$btn_target_add.height           = 20
+$btn_target_add.location         = New-Object System.Drawing.Point(90,70)
+$btn_target_add.Font             = 'Microsoft Sans Serif,10'
+$btn_target_add.Cursor           = [System.Windows.Forms.Cursors]::Hand
+
+$btn_target_sub                  = New-Object system.Windows.Forms.Button
+$btn_target_sub.BackColor        = "#fad6fc"
+$btn_target_sub.text             = "-"
+$btn_target_sub.width            = 20
+$btn_target_sub.height           = 20
+$btn_target_sub.location         = New-Object System.Drawing.Point(90,90)
+$btn_target_sub.Font             = 'Microsoft Sans Serif,10'
+$btn_target_sub.Cursor           = [System.Windows.Forms.Cursors]::Hand
+
+# Authentication
+$grp_auth                        = New-Object system.Windows.Forms.Groupbox
+$grp_auth.height                 = 120
+$grp_auth.width                  = 270
+$grp_auth.BackColor              = "#cccccc"
+$grp_auth.text                   = "Authentication"
+$grp_auth.location               = New-Object System.Drawing.Point(275,10)
+
+$chk_auth                        = New-Object system.Windows.Forms.CheckBox
+$chk_auth.text                   = "Use Authentication"
+$chk_auth.AutoSize               = $false
+$chk_auth.width                  = 140
+$chk_auth.height                 = 20
+$chk_auth.location               = New-Object System.Drawing.Point(10,20)
+$chk_auth.Font                   = 'Microsoft Sans Serif,10'
+$chk_auth.Cursor                 = [System.Windows.Forms.Cursors]::Hand
+
+$lbl_cur_user                    = New-Object system.Windows.Forms.Label
+$lbl_cur_user.text               = "Current User:"
+$lbl_cur_user.AutoSize           = $false
+$lbl_cur_user.width              = 100
+$lbl_cur_user.height             = 20
+$lbl_cur_user.location           = New-Object System.Drawing.Point(10,45)
+$lbl_cur_user.Font               = 'Microsoft Sans Serif,10'
+
+$lbl_user                        = New-Object system.Windows.Forms.Label
+$lbl_user.text                   = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$lbl_user.AutoSize               = $false
+$lbl_user.width                  = 260
+$lbl_user.height                 = 20
+$lbl_user.location               = New-Object System.Drawing.Point(10,65)
+$lbl_user.Font                   = 'Microsoft Sans Serif,10,style=Bold'
+
+$lbl_method                      = New-Object system.Windows.Forms.Label
+$lbl_method.text                 = "Method:"
+$lbl_method.AutoSize             = $false
+$lbl_method.width                = 55
+$lbl_method.height               = 20
+$lbl_method.location             = New-Object System.Drawing.Point(10,90)
+$lbl_method.Font                 = 'Microsoft Sans Serif,10'
 
 $btn_set_user                    = New-Object system.Windows.Forms.Button
 $btn_set_user.BackColor          = "#fad6fc"
 $btn_set_user.text               = "Set User"
 $btn_set_user.width              = 100
 $btn_set_user.height             = 24
-$btn_set_user.location           = New-Object System.Drawing.Point(50,70)
+$btn_set_user.location           = New-Object System.Drawing.Point(160,17)
 $btn_set_user.Font               = 'Microsoft Sans Serif,10'
-$btn_set_user.ForeColor          = "#4d4d4d"
+$btn_set_user.Cursor              = [System.Windows.Forms.Cursors]::Hand
 
-$lbl_user                        = New-Object system.Windows.Forms.Label
-$lbl_user.text                   = $CRED_NAME
-$lbl_user.AutoSize               = $true
-$lbl_user.width                  = 100
-$lbl_user.height                 = 10
-$lbl_user.location               = New-Object System.Drawing.Point(18,49)
-$lbl_user.Font                   = 'Microsoft Sans Serif,10'
+$cmb_auth                        = New-Object system.Windows.Forms.ComboBox
+$cmb_auth.text                   = "Kerberos"
+$cmb_auth.BackColor              = "#b3b3b3"
+$cmb_auth.width                  = 195
+$cmb_auth.height                 = 20
+$cmb_auth.location               = New-Object System.Drawing.Point(65,86)
+$cmb_auth.Font                   = 'Microsoft Sans Serif,10'
+$cmb_auth.Cursor                 = [System.Windows.Forms.Cursors]::Hand
+$cmb_auth.Items.AddRange(("Basic", "CredSSP", "Digest", "Kerberos", "Negotiate", "NegotiateWithImplicitCredential")) > $null
 
-$combo_auth                      = New-Object system.Windows.Forms.ComboBox
-$combo_auth.text                 = $AUTHENTICATION
-$combo_auth.BackColor            = "#cccccc"
-$combo_auth.width                = 180
-$combo_auth.height               = 20
-$combo_auth.location             = New-Object System.Drawing.Point(10,105)
-$combo_auth.Font                 = 'Microsoft Sans Serif,10'
-$combo_auth.Items.AddRange(("Basic", "CredSSP", "Digest", "Kerberos", "Negotiate", "NegotiateWithImplicitCredential")) > $null
-
-$list_modules                    = New-Object system.Windows.Forms.ListBox
-$list_modules.BackColor          = "#cccccc"
-$list_modules.width              = 334
-$list_modules.height             = 235
-$list_modules.location           = New-Object System.Drawing.Point(10,20)
-$list_modules.SelectionMode      = "MultiExtended"
-foreach ($MODULE in $MODULES){
-    $list_modules.Items.Add($MODULE) > $null
-}
-
-$list_analysis                   = New-Object system.Windows.Forms.ListBox
-$list_analysis.BackColor         = "#cccccc"
-$list_analysis.width             = 346
-$list_analysis.height            = 267
-$list_analysis.location          = New-Object System.Drawing.Point(10,20)
-$list_analysis.SelectionMode     = "MultiExtended"
-foreach ($ANAL in $ANALYSIS){
-  $list_analysis.Items.Add($ANAL) > $null
-}
-
-$check_ssl                       = New-Object system.Windows.Forms.CheckBox
-$check_ssl.text                  = "Use SSL"
-$check_ssl.AutoSize              = $false
-$check_ssl.width                 = 95
-$check_ssl.height                = 20
-$check_ssl.location              = New-Object System.Drawing.Point(16,26)
-$check_ssl.Font                  = 'Microsoft Sans Serif,10'
-
-$txt_port                        = New-Object system.Windows.Forms.TextBox
-$txt_port.Text                   = $WINRM_PORT
-$txt_port.multiline              = $false
-$txt_port.BackColor              = "#cccccc"
-$txt_port.width                  = 134
-$txt_port.height                 = 20
-$txt_port.location               = New-Object System.Drawing.Point(62,59)
-$txt_port.Font                   = 'Microsoft Sans Serif,10'
-
-$lbl_port                        = New-Object system.Windows.Forms.Label
-$lbl_port.text                   = "Port:"
-$lbl_port.AutoSize               = $true
-$lbl_port.width                  = 25
-$lbl_port.height                 = 10
-$lbl_port.location               = New-Object System.Drawing.Point(20,62)
-$lbl_port.Font                   = 'Microsoft Sans Serif,10'
+# Settings
+$grp_settings                    = New-Object system.Windows.Forms.Groupbox
+$grp_settings.height             = 145
+$grp_settings.width              = 270
+$grp_settings.BackColor          = "#cccccc"
+$grp_settings.text               = "App Settings"
+$grp_settings.location           = New-Object System.Drawing.Point(275,145)
 
 $lbl_mod_path                    = New-Object system.Windows.Forms.Label
 $lbl_mod_path.text               = "Module Path:"
-$lbl_mod_path.AutoSize           = $true
-$lbl_mod_path.width              = 25
-$lbl_mod_path.height             = 10
-$lbl_mod_path.location           = New-Object System.Drawing.Point(16,22)
+$lbl_mod_path.AutoSize           = $false
+$lbl_mod_path.width              = 90
+$lbl_mod_path.height             = 20
+$lbl_mod_path.location           = New-Object System.Drawing.Point(10,20)
+
 $lbl_mod_path.Font               = 'Microsoft Sans Serif,10'
-
-$txt_mod_path                    = New-Object system.Windows.Forms.TextBox
-$txt_mod_path.Text               = $MOD_PATH
-$txt_mod_path.multiline          = $false
-$txt_mod_path.BackColor          = "#cccccc"
-$txt_mod_path.width              = 121
-$txt_mod_path.height             = 20
-$txt_mod_path.location           = New-Object System.Drawing.Point(105,17)
-$txt_mod_path.Font               = 'Microsoft Sans Serif,10'
-
-$check_push_bin                  = New-Object system.Windows.Forms.CheckBox
-$check_push_bin.text             = "Push Binary"
-$check_push_bin.AutoSize         = $false
-$check_push_bin.width            = 95
-$check_push_bin.height           = 20
-$check_push_bin.location         = New-Object System.Drawing.Point(21,267)
-$check_push_bin.Font             = 'Microsoft Sans Serif,10'
-
-$check_rm_bin                    = New-Object system.Windows.Forms.CheckBox
-$check_rm_bin.text               = "Remove Binary"
-$check_rm_bin.AutoSize           = $false
-$check_rm_bin.width              = 95
-$check_rm_bin.height             = 20
-$check_rm_bin.location           = New-Object System.Drawing.Point(218,269)
-$check_rm_bin.Font               = 'Microsoft Sans Serif,10'
-
-$check_ascii                     = New-Object system.Windows.Forms.CheckBox
-$check_ascii.text                = "ASCII Output"
-$check_ascii.AutoSize            = $false
-$check_ascii.width               = 95
-$check_ascii.height              = 20
-$check_ascii.location            = New-Object System.Drawing.Point(16,48)
-$check_ascii.Font                = 'Microsoft Sans Serif,10'
-
-$check_analysis                  = New-Object system.Windows.Forms.CheckBox
-$check_analysis.text             = "Run Analysis"
-$check_analysis.AutoSize         = $false
-$check_analysis.width            = 95
-$check_analysis.height           = 20
-$check_analysis.location         = New-Object System.Drawing.Point(18,76)
-$check_analysis.Font             = 'Microsoft Sans Serif,10'
-
-$check_transcribe                = New-Object system.Windows.Forms.CheckBox
-$check_transcribe.text           = "Transcribe"
-$check_transcribe.AutoSize       = $false
-$check_transcribe.width          = 95
-$check_transcribe.height         = 20
-$check_transcribe.location       = New-Object System.Drawing.Point(16,102)
-$check_transcribe.Font           = 'Microsoft Sans Serif,10'
-
 $lbl_json_depth                  = New-Object system.Windows.Forms.Label
 $lbl_json_depth.text             = "JSON Depth:"
-$lbl_json_depth.AutoSize         = $true
-$lbl_json_depth.width            = 25
-$lbl_json_depth.height           = 10
-$lbl_json_depth.location         = New-Object System.Drawing.Point(14,130)
+$lbl_json_depth.AutoSize         = $false
+$lbl_json_depth.width            = 90
+$lbl_json_depth.height           = 20
+$lbl_json_depth.location         = New-Object System.Drawing.Point(10,58)
 $lbl_json_depth.Font             = 'Microsoft Sans Serif,10'
 
+$txt_mod_path                    = New-Object system.Windows.Forms.TextBox
+$txt_mod_path.Text               = ".\Modules"
+$txt_mod_path.multiline          = $false
+$txt_mod_path.BackColor          = "#b3b3b3"
+$txt_mod_path.width              = 160
+$txt_mod_path.height             = 20
+$txt_mod_path.location           = New-Object System.Drawing.Point(100,17)
+$txt_mod_path.Font               = 'Microsoft Sans Serif,10'
+
 $txt_json_depth                  = New-Object system.Windows.Forms.TextBox
-$txt_json_depth.Text             = $JSON_DEPTH
+$txt_json_depth.Text             = "10"
 $txt_json_depth.multiline        = $false
-$txt_json_depth.BackColor        = "#cccccc"
-$txt_json_depth.width            = 123
+$txt_json_depth.BackColor        = "#b3b3b3"
+$txt_json_depth.width            = 160
 $txt_json_depth.height           = 20
-$txt_json_depth.location         = New-Object System.Drawing.Point(103,126)
+$txt_json_depth.location         = New-Object System.Drawing.Point(100,55)
 $txt_json_depth.Font             = 'Microsoft Sans Serif,10'
+
+$chk_ascii                       = New-Object system.Windows.Forms.CheckBox
+$chk_ascii.text                  = "ASCII Output"
+$chk_ascii.AutoSize              = $false
+$chk_ascii.width                 = 120
+$chk_ascii.height                = 20
+$chk_ascii.location              = New-Object System.Drawing.Point(10,88)
+$chk_ascii.Font                  = 'Microsoft Sans Serif,10'
+
+$chk_transcribe                  = New-Object system.Windows.Forms.CheckBox
+$chk_transcribe.text             = "Transcribe"
+$chk_transcribe.AutoSize         = $false
+$chk_transcribe.width            = 120
+$chk_transcribe.height           = 20
+$chk_transcribe.location         = New-Object System.Drawing.Point(10,115)
+$chk_transcribe.Font             = 'Microsoft Sans Serif,10'
+
+# Connection Settings
+$grp_connection                  = New-Object system.Windows.Forms.Groupbox
+$grp_connection.height           = 145
+$grp_connection.width            = 220
+$grp_connection.BackColor        = "#cccccc"
+$grp_connection.text             = "Connection Settings"
+$grp_connection.location         = New-Object System.Drawing.Point(560,145)
+
+$chk_ssl                         = New-Object system.Windows.Forms.CheckBox
+$chk_ssl.text                    = "Use SSL"
+$chk_ssl.AutoSize                = $false
+$chk_ssl.width                   = 95
+$chk_ssl.height                  = 20
+$chk_ssl.location                = New-Object System.Drawing.Point(10,35)
+$chk_ssl.Font                    = 'Microsoft Sans Serif,10'
+
+$lbl_port                        = New-Object system.Windows.Forms.Label
+$lbl_port.text                   = "Port:"
+$lbl_port.AutoSize               = $false
+$lbl_port.width                  = 40
+$lbl_port.height                 = 20
+$lbl_port.location               = New-Object System.Drawing.Point(10,68)
+$lbl_port.Font                   = 'Microsoft Sans Serif,10'
+
+$txt_port                        = New-Object system.Windows.Forms.TextBox
+$txt_port.Text                   = "5985"
+$txt_port.multiline              = $false
+$txt_port.BackColor              = "#b3b3b3"
+$txt_port.width                  = 160
+$txt_port.height                 = 20
+$txt_port.location               = New-Object System.Drawing.Point(50,65)
+$txt_port.Font                   = 'Microsoft Sans Serif,10'
+
+# Button Panel
+$pnl_execute                     = New-Object system.Windows.Forms.Panel
+$pnl_execute.height              = 120
+$pnl_execute.width               = 220
+$pnl_execute.BackColor           = "#cccccc"
+$pnl_execute.location            = New-Object System.Drawing.Point(560,10)
 
 $btn_run                         = New-Object system.Windows.Forms.Button
 $btn_run.BackColor               = "#fad6fc"
 $btn_run.text                    = "Make, Go, Happen!"
-$btn_run.width                   = 123
-$btn_run.height                  = 30
-$btn_run.location                = New-Object System.Drawing.Point(51,10)
+$btn_run.width                   = 160
+$btn_run.height                  = 50
+$btn_run.location                = New-Object System.Drawing.Point(30,33)
 $btn_run.Font                    = 'Microsoft Sans Serif,10'
 
-$btn_cancel                      = New-Object system.Windows.Forms.Button
-$btn_cancel.BackColor            = "#fad6fc"
-$btn_cancel.text                 = "Cancel"
-$btn_cancel.width                = 122
-$btn_cancel.height               = 30
-$btn_cancel.location             = New-Object System.Drawing.Point(51,45)
-$btn_cancel.Font                 = 'Microsoft Sans Serif,10'
+# Module List
+$grp_modules                     = New-Object system.Windows.Forms.Groupbox
+$grp_modules.height              = 300
+$grp_modules.width               = 377
+$grp_modules.BackColor           = "#cccccc"
+$grp_modules.text                = "Modules"
+$grp_modules.location            = New-Object System.Drawing.Point(10,300)
 
-$bar_execute                     = New-Object system.Windows.Forms.ProgressBar
-$bar_execute.width               = 209
-$bar_execute.height              = 33
-$bar_execute.location            = New-Object System.Drawing.Point(10,88)
+$lst_modules                     = New-Object system.Windows.Forms.ListBox
+$lst_modules.BackColor           = "#b3b3b3"
+$lst_modules.width               = 355
+$lst_modules.height              = 240
+$lst_modules.location            = New-Object System.Drawing.Point(10,20)
+$lst_modules.SelectionMode       = "MultiExtended"
+$lst_modules.Items.AddRange($(Read-Module-List))
 
-$btn_target_add                  = New-Object system.Windows.Forms.Button
-$btn_target_add.text             = "+"
-$btn_target_add.width            = 20
-$btn_target_add.height           = 20
-$btn_target_add.location         = New-Object System.Drawing.Point(83,79)
-$btn_target_add.Font             = 'Microsoft Sans Serif,10'
+$chk_push_bin                    = New-Object system.Windows.Forms.CheckBox
+$chk_push_bin.text               = "Push Binary"
+$chk_push_bin.AutoSize           = $false
+$chk_push_bin.width              = 100
+$chk_push_bin.height             = 20
+$chk_push_bin.location           = New-Object System.Drawing.Point(10,270)
+$chk_push_bin.Font               = 'Microsoft Sans Serif,10'
 
-$btn_target_rm                   = New-Object system.Windows.Forms.Button
-$btn_target_rm.text              = "-"
-$btn_target_rm.width             = 20
-$btn_target_rm.height            = 20
-$btn_target_rm.location          = New-Object System.Drawing.Point(83,109)
-$btn_target_rm.Font              = 'Microsoft Sans Serif,10'
+$chk_rm_bin                      = New-Object system.Windows.Forms.CheckBox
+$chk_rm_bin.text                 = "Remove Binary"
+$chk_rm_bin.AutoSize             = $false
+$chk_rm_bin.width                = 120
+$chk_rm_bin.height               = 20
+$chk_rm_bin.location             = New-Object System.Drawing.Point(120,270)
+$chk_rm_bin.Font                 = 'Microsoft Sans Serif,10'
 
-$form_kansa.controls.AddRange(@($group_targeting,$group_auth,$group_settings,$group_connection,$group_modules,$group_analysis,$panel_execute))
-$group_targeting.controls.AddRange(@($radio_target,$radio_target_list,$radio_target_count,$txt_target,$txt_target_count,$list_target_list,$btn_target_add,$btn_target_rm))
-$group_auth.controls.AddRange(@($check_auth,$btn_set_user,$lbl_user,$combo_auth))
-$group_modules.controls.AddRange(@($list_modules,$check_push_bin,$check_rm_bin))
-$group_analysis.controls.AddRange(@($list_analysis))
-$group_connection.controls.AddRange(@($check_ssl,$txt_port,$lbl_port))
-$group_settings.controls.AddRange(@($lbl_mod_path,$txt_mod_path,$check_ascii,$check_analysis,$check_transcribe,$lbl_json_depth,$txt_json_depth))
-$panel_execute.controls.AddRange(@($btn_run,$btn_cancel,$bar_execute))
+# Analysis Scripts
+$grp_analysis                    = New-Object system.Windows.Forms.Groupbox
+$grp_analysis.height             = 300
+$grp_analysis.width              = 377
+$grp_analysis.BackColor          = "#cccccc"
+$grp_analysis.text               = "Post-Analysis"
+$grp_analysis.location           = New-Object System.Drawing.Point(403,300)
 
-#region gui events {
-$btn_set_user.Add_Click({
-  $global:CREDENTIAL = Get-Credential
-  $global:CRED_NAME = $CREDENTIAL.UserName
-  $lbl_user.Text = $CRED_NAME
-  $lbl_user.Refresh()
+$lst_analysis                    = New-Object system.Windows.Forms.ListBox
+$lst_analysis.BackColor          = "#b3b3b3"
+$lst_analysis.width              = 355
+$lst_analysis.height             = 240
+$lst_analysis.location           = New-Object System.Drawing.Point(10,20)
+$lst_analysis.SelectionMode      = "MultiExtended"
+$lst_analysis.Items.AddRange($(Read-Script-List))
+
+$chk_analysis                    = New-Object system.Windows.Forms.CheckBox
+$chk_analysis.text               = "Use Post-Analysis"
+$chk_analysis.AutoSize           = $false
+$chk_analysis.width              = 135
+$chk_analysis.height             = 20
+$chk_analysis.location           = New-Object System.Drawing.Point(10,270)
+$chk_analysis.Font               = 'Microsoft Sans Serif,10'
+
+$frm_kansa.controls.AddRange(@($grp_targeting,$grp_auth,$grp_settings,$grp_connection,$pnl_execute,$grp_modules,$grp_analysis))
+$grp_targeting.controls.AddRange(@($rad_target,$rad_target_list,$rad_target_count,$txt_target,$txt_target_count,$lst_target_list,$btn_target_add,$btn_target_sub))
+$grp_auth.controls.AddRange(@($chk_auth,$lbl_cur_user,$lbl_user,$lbl_method,$btn_set_user,$cmb_auth))
+$grp_settings.controls.AddRange(@($lbl_mod_path, $lbl_json_depth,$txt_mod_path,$txt_json_depth,$chk_ascii,$chk_transcribe))
+$grp_connection.controls.AddRange(@($chk_ssl,$lbl_port,$txt_port))
+$grp_modules.controls.AddRange(@($lst_modules,$chk_push_bin,$chk_rm_bin))
+$grp_analysis.controls.AddRange(@($lst_analysis,$chk_analysis))
+$pnl_execute.controls.AddRange(@($btn_run))
+
+# Targeting Events
+$btn_target_add.Add_Click({
+    $rad_target_list.Checked = $true
+    $text = [Microsoft.VisualBasic.Interaction]::InputBox("Add a target to Kansa.`nMultiple targets can be comma seperated.", "Add Target")
+    $text = $text.Replace("\s","").Split(",")
+    $lst_target_list.Items.AddRange($text)
+    Initialize-Target-List($lst_target_list.Items)
 })
 
-$btn_cancel.Add_Click({  })
-
-$check_ascii.Add_CheckedChanged({
-    if ($check_ascii.Checked){
-        $global:ASCII = $true
-    } else {
-        $global:ASCII = $false
-    }
-})
-
-$check_analysis.Add_CheckedChanged({
-    if ($check_analysis.Checked){
-        $global:USE_ANALYSIS = $true
-    } else {
-        $global:USE_ANALYSIS = $false
-    }
-})
-
-$check_transcribe.Add_CheckedChanged({
-    if ($check_transcribe.Checked){
-        $global:TRANSCRIBE = $true
-    } else {
-        $global:TRANSCRIBE = $false
-    }
-})
-
-$radio_target.Add_CheckedChanged({  })
-
-$radio_target_list.Add_CheckedChanged({  })
-
-$radio_target_count.Add_CheckedChanged({  })
-
-$check_push_bin.Add_CheckedChanged({
-    if ($check_push_bin.Checked){
-        $global:PUSH_BIN = $true
-    } else {
-        $global:PUSH_BIN = $false
-    }
-})
-
-$check_rm_bin.Add_CheckedChanged({
-    if ($check_rm_bin.Checked){
-        $global:RM_BIN = $true
-    } else {
-        $global:RM_BIN = $false
-    }
-})
-
-$check_auth.Add_CheckedChanged({
-    if ($check_auth.Checked){
-        $global:USE_AUTH = $true
-    } else {
-        $global:USE_AUTH = $false
-    }
-})
-
-$check_ssl.Add_CheckedChanged({
-    if ($check_ssl.Checked){
-        $txt_port.Text = "5986"
-        $global:USE_SSL = $true
-    } else {
-        $txt_port.Text = "5985"
-        $global:USE_SSL = $false
-    }
-    $global:WINRM_PORT = $txt_port.Text
-})
-
-$txt_mod_path.Add_TextChanged({ $global:MOD_PATH = $txt_mod_path.Text })
-
-$txt_json_depth.Add_TextChanged({
-    if ($txt_json_depth.Text -eq ""){
-        $txt_json_depth.Text = "10"
-        } elseif ($txt_json_depth.Text -match '\D'){
-            $txt_json_depth.Text = $txt_json_depth.Text -replace '\D'
-            if ($txt_json_depth.Text.Length -gt 0){
-                $txt_json_depth.Focus()
-                $txt_json_depth.SelectionStart = $txt_json_depth.Text.Length
+$btn_target_sub.Add_Click({
+    $temp = @()
+    If ($lst_target_list.SelectedItems.Count -gt 0){
+        For ($i=0; $i -le $lst_target_list.Items.Count-1; $i++){
+            If ($lst_target_list.SelectedItems -NotContains $lst_target_list.Items[$i]){
+                $temp += $lst_target_list.Items[$i]
             }
         }
-        $global:JSON_DEPTH = $txt_json_depth.Text
-})
-
-$txt_port.Add_TextChanged({
-    if ($check_ssl.Checked -And $txt_port.Text -eq ""){
-        $txt_port.Text = "5986"
-    } elseif ($txt_port.Text -eq ""){
-        $txt_port.Text = "5985"
-    } elseif ($txt_port.Text -match '\D'){
-        $txt_port.Text = $txt_port.Text -replace '\D'
-        if ($txt_port.Text.Length -gt 0){
-            $txt_port.Focus()
-            $txt_port.SelectionStart = $txt_port.Text.Length
-        }
+        $lst_target_list.Items.Clear()
+        $lst_target_list.Items.AddRange($temp)
+        $temp.Clear()
+        Initialize-Target-List($lst_target_list.Items)
     }
-    $global:WINRM_PORT = $txt_port.Text
 })
 
-$txt_target.Add_TextChanged({ $global:TARGET = $txt_target.Text })
+$txt_target.Add_TextChanged({
+    If ($txt_target.Text -eq ""){
+        $txt_target.Text = "127.0.0.1"
+    } Else {
+        $Options.Target = $txt_target.Text
+    }
+})
 
 $txt_target_count.Add_TextChanged({
-    if ($txt_target_count.Text -eq ""){
+    If ($txt_target_count.Text -eq ""){
         $txt_target_count.Text = "10"
-        } elseif ($txt_target_count.Text -match '\D'){
-            $txt_target_count.Text = $txt_target_count.Text -replace '\D'
-            if ($txt_target_count.Text.Length -gt 0){
-                $txt_target_count.Focus()
-                $txt_target_count.SelectionStart = $txt_target_count.Text.Length
-            }
-        }
-        $global:TARGET_COUNT = $txt_target_count.Text
+    } ElseIf ($txt_target_count.Text -Match "\D"){
+        $txt_target_count.Text = $txt_target_count.Text -Replace "\D"
+        $txt_target_count.Focus()
+        $txt_target_count.SelectionStart = $txt_target_count.Text.Length
+    }
+    $Options.Target_Count = $txt_target_count.Text
 })
 
-$combo_auth.Add_TextChanged({
-    $global:AUTHENTICATION = $combo_auth.Text
-})
-
-$btn_target_add.Add_Click({
-    $text = [Microsoft.VisualBasic.Interaction]::InputBox("Add a Target to Kansa`nMultiple targets can be comma separated.", "Add Target")
-    $text = $text -replace "\s",""
-    $text = $text.Split(",")
-    $list_target_list.Items.AddRange($text)
-})
-
-$btn_target_rm.Add_Click({
-    $temp = @()
-    if ($list_target_list.SelectedItems.Count -gt 0){
-        For ($i=0; $i -le $list_target_list.Items.Count - 1; $i++){
-            if ($list_target_list.SelectedItems -NotContains $list_target_list.Items[$i]){
-                $temp += $list_target_list.Items[$i]
-            }
-        }
-        $list_length = $list_target_list.Items.Count
-        For ($i=0; $i -le $list_length - 1; $i++){
-            $list_target_list.Items.Remove($list_target_list.Items[0])
-        }
-        $list_target_list.Items.AddRange($temp)
+$rad_target_list.Add_Click({
+    If ($rad_target_list.Checked){
+        Initialize-Target-List($lst_target_list.Items)
     }
 })
 
-$list_modules.add_SelectedIndexChanged({
-    If ($list_modules.SelectedItems.Count -gt 0){
-        Clear-Content -Path ".\Kansa\Modules\Modules.conf"
-        ForEach ($i in $list_modules.SelectedItems){
-            Add-Content ".\Kansa\Modules\Modules.conf" $i
+# Authentication Events
+$btn_set_user.Add_Click({
+    $Options.Creds = Get-Credential
+    $lbl_user.Text = $Options.Creds.UserName
+    $lbl_user.Refresh()
+})
+
+$cmb_auth.Add_TextChanged({$Options.Auth_Method = $cmb_auth.Text})
+
+# Settings Events
+$txt_mod_path.Add_TextChanged({
+    If ($txt_mod_path.Text -eq ""){
+        $txt_mod_path.Text = ".\Modules"
+    }
+    $Options.Mod_Path = $txt_mod_path.Text
+    ### UPDATE MODULE LIST TO REFLECT NEW PATH!!!! ###
+})
+
+$txt_json_depth.Add_TextChanged({
+    If ($txt_json_depth.Text -eq ""){
+        $txt_json_depth.Text = "10"
+    } ElseIf ($txt_json_depth.Text -Match "\D"){
+        $txt_json_depth.Text = $txt_json_depth.Text -Replace "\D"
+        $txt_json_depth.Focus()
+        $txt_json_depth.SelectionStart = $txt_json_depth.Text.Length
+    }
+    $Options.JSON_Depth = $txt_json_depth.Text
+})
+
+# Connection Events
+$txt_port.Add_TextChanged({
+    If ($chk_ssl.Checked -And $txt_port.Text -eq ""){
+        $txt_port.Text -eq "5986"
+    } ElseIf ($txt_port.Text -eq ""){
+        $txt_port.Text -eq "5985"
+    } ElseIf ($txt_port.Text -Match "\D"){
+        $txt_port.Text = $txt_port.Text -Replace "\D"
+        $txt_port.Focus()
+        $txt_port.SelectionStart = $txt_port.Text.Length
+    }
+    $Options.Port = $txt_port.Text
+})
+
+$chk_ssl.Add_CheckedChanged({
+    If ($chk_ssl.Checked){
+        $txt_port.Text = "5986"
+    } Else {
+        $txt_port.Text = "5985"
+    }
+})
+
+# Module List Events
+$lst_modules.Add_SelectedIndexChanged({
+    If ($lst_modules.SelectedItems.Count -gt 0){
+        Clear-Content ".\Kansa\$($Options.Mod_Path)\Modules.conf"
+        ForEach ($i in $lst_modules.SelectedItems){
+            Add-Content ".\Kansa\$($Options.Mod_Path)\Modules.conf" $i
         }
     }
 })
 
-$list_analysis.add_SelectedIndexChanged({
-    If ($list_analysis.SelectedItems.Count -gt 0){
-        Clear-Content -Path ".\Kansa\Analysis\Analysis.conf"
-        ForEach ($i in $list_analysis.SelectedItems){
+# Analysis Scripts List Events
+$lst_analysis.Add_SelectedIndexChanged({
+    If ($lst_analysis.SelectedItems.Count -gt 0){
+        Clear-Content ".\Kansa\Analysis\Analysis.conf"
+        ForEach ($i in $lst_analysis.SelectedItems){
             Add-Content ".\Kansa\Analysis\Analysis.conf" $i
         }
     }
 })
 
+# Panel Events
 $btn_run.Add_Click({
-    Push-Location .\Kansa
-    $KANSA_CMD = ".\kansa.ps1"
-    $KANSA_CMD += " -ModulePath " + $MOD_PATH
-
-    if ($radio_target.Checked){
-        $KANSA_CMD += " -Target " + $txt_target.Text
-    } elseif ($radio_target_list.Checked){
-        if ($list_target_list.Items.Count -eq 0){
-            [System.Windows.MessageBox]::Show("You must add targets to the list!", "No Targets", "OK", "Warning")
-            Pop-Location
-            return
-        } else {
-            if (!(Test-Path ".\Targets.txt")){
-                New-Item -Path ".\Targets.txt" -Type "File"
-            }
-            Clear-Content -Path ".\Targets.txt"
-            ForEach ($i in $list_target_list.Items){
-                Add-Content ".\Targets.txt" $i
-            }
-            $KANSA_CMD += " -TargetList Targets.txt"
-        }
-    } else {
-        $KANSA_CMD += " -TargetCount " + $txt_target_count.Text
+    $build_success = (Initialize-Splat)
+    If ($build_success){
+        Write-Host $($CLI_Arguments | Out-String)
+        Push-Location .\Kansa
+        .\kansa.ps1 @CLI_Arguments
+        Pop-Location
+        Move-Item -Path ".\Kansa\Output_*" -Destination "."
     }
-
-    if ($PUSH_BIN){$KANSA_CMD += " -Pushbin"}
-    if ($RM_BIN){$KANSA_CMD += " -Rmbin"}
-    if ($ASCII){$KANSA_CMD += " -Ascii"}
-    if ($TRANSCRIBE){$KANSA_CMD += " -Transcribe"}
-    if ($USE_ANALYSIS){$KANSA_CMD += " -Analysis"}
-    if ($USE_SSL){$KANSA_CMD += " -UseSSL"}
-    $KANSA_CMD += " -Port " + $WINRM_PORT
-    $KANSA_CMD += " -JSONDepth " + $JSON_DEPTH
-
-    #if ($USE_AUTH -And $CREDENTIAL){
-    #    $KANSA_CMD += " -Credential " + $CREDENTIAL + " -Authentication " + $AUTHENTICATION
-    #    Write-Host $KANSA_CMD
-    #    iex $KANSA_CMD
-    #} else {
-    #    Write-Host $KANSA_CMD
-    #    iex $KANSA_CMD
-    #}
-    iex $KANSA_CMD
-    Pop-Location
-    Move-Item -Path ".\Kansa\Output_*" -Destination "."
 })
-#endregion events }
 
-#endregion GUI }
-
-[void]$form_kansa.ShowDialog()
+[void]$frm_kansa.ShowDialog()
+$CLI_Arguments.Clear()
+$Options.Clear()
