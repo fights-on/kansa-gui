@@ -44,6 +44,17 @@ Function Initialize-Target-List($items){
     }
 }
 
+Function Check-Dependency($script_name){
+    # Checks scripts against rules to check for dependencies
+    if (("ASEP\Get-Autorunsc.ps1","ASEP\Get-AutorunscDeep.ps1") -Contains $script_name){
+        If (!(Test-Path ".\Kansa\Modules\bin\Autorunsc.exe")){
+            [System.Windows.MessageBox]::Show(
+                "$($script_name) requires the following dependency. RTM for instructions on how to fix this issue.`n`n.\Modules\bin\Autorunsc.exe",
+                "Missing Dependency - $($script_name)", "OK", "Error")
+        }
+    }
+}
+
 Function Initialize-Splat(){
     # Build the HashTable for Kansa's arguments
 
@@ -564,6 +575,7 @@ $lst_modules.Add_SelectedIndexChanged({
     If ($lst_modules.SelectedItems.Count -gt 0){
         Clear-Content ".\Kansa\$($Options.Mod_Path)\Modules.conf"
         ForEach ($i in $lst_modules.SelectedItems){
+            Check-Dependency($i)
             Add-Content ".\Kansa\$($Options.Mod_Path)\Modules.conf" $i
         }
     }
